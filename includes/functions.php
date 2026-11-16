@@ -8,7 +8,19 @@ function e($str) {
 }
 
 function redirect($url) {
-    header('Location: ' . BASE_URL . '/' . ltrim($url, '/'));
+    $target = BASE_URL . '/' . ltrim($url, '/');
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    if (!headers_sent()) {
+        header('Location: ' . $target);
+        exit;
+    }
+    echo '<!DOCTYPE html><html><head><meta charset="utf-8">';
+    echo '<meta http-equiv="refresh" content="0;url=' . htmlspecialchars($target, ENT_QUOTES, 'UTF-8') . '">';
+    echo '</head><body><p>Redirect… <a href="' . htmlspecialchars($target, ENT_QUOTES, 'UTF-8') . '">Lanjut</a></p>';
+    echo '<script>location.replace(' . json_encode($target) . ');</script>';
+    echo '</body></html>';
     exit;
 }
 
