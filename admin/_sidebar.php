@@ -1,12 +1,13 @@
 <?php
 // Sidebar menu admin — dipakai di semua halaman admin
 $active = $active_menu ?? '';
-$counts = [
-    'pending' => (int)$pdo->query('SELECT COUNT(*) FROM orders WHERE status = "pending"')->fetchColumn(),
-    'processed' => (int)$pdo->query('SELECT COUNT(*) FROM orders WHERE status = "processed"')->fetchColumn(),
-    'shipped' => (int)$pdo->query('SELECT COUNT(*) FROM orders WHERE status = "shipped"')->fetchColumn(),
-];
-$pendingSum = $counts['pending'] + $counts['processed'] + $counts['shipped'];
+$countRow = $pdo->query(
+    "SELECT COALESCE(SUM(status='pending'),0) AS pending,
+            COALESCE(SUM(status='processed'),0) AS processed,
+            COALESCE(SUM(status='shipped'),0) AS shipped
+     FROM orders"
+)->fetch();
+$pendingSum = (int)$countRow['pending'] + (int)$countRow['processed'] + (int)$countRow['shipped'];
 ?>
 <aside class="admin-sidebar card">
     <div class="card-body" style="padding:14px">

@@ -35,16 +35,28 @@ $similar = $similar->fetchAll();
 
 $user = current_user();
 $alreadyReviewed = false;
+$hasPurchased = false;
 if ($user) {
     $chk = $pdo->prepare('SELECT id FROM reviews WHERE user_id = ? AND product_id = ?');
     $chk->execute([$user['id'], $id]);
     $alreadyReviewed = (bool)$chk->fetch();
+
+    $buy = $pdo->prepare(
+        "SELECT COUNT(*) FROM orders o JOIN order_items oi ON oi.order_id = o.id
+         WHERE o.user_id = ? AND oi.product_id = ? AND o.status = 'delivered'"
+    );
+    $buy->execute([$user['id'], $id]);
+    $hasPurchased = (int)$buy->fetchColumn() > 0;
 }
 
 // Proses ulasan
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_review'])) {
     require_login();
     csrf_check();
+    if (!$hasPurchased) {
+        set_flash('warning', 'Anda hanya bisa mengulas produk yang sudah Anda beli dan terima.');
+        redirect('produk.php?id=' . $id);
+    }
     $rating = (int)($_POST['rating'] ?? 5);
     $comment = trim($_POST['comment'] ?? '');
     if ($rating < 1 || $rating > 5) $rating = 5;
@@ -118,7 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_review'])) {
 <div class="panel-grid">
     <div class="card">
         <div class="card-body">
-            <?php if ($user && !$alreadyReviewed && !$product['stock'] == 0): ?>
+            <?php if ($user && $hasPurchased && !$alreadyReviewed): ?>
                 <form method="post" action="">
                     <?= csrf_field() ?>
                     <input type="hidden" name="submit_review" value="1">
@@ -144,6 +156,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_review'])) {
                 <hr style="border:none;border-top:1px solid var(--border);margin:18px 0">
             <?php elseif ($alreadyReviewed): ?>
                 <p class="text-muted">Anda sudah memberikan ulasan untuk produk ini. Terima kasih!</p>
+                <hr style="border:none;border-top:1px solid var(--border);margin:18px 0">
+            <?php else: ?>
+                <p class="text-muted">Anda hanya dapat memberi ulasan setelah membeli dan menerima produk ini.</p>
                 <hr style="border:none;border-top:1px solid var(--border);margin:18px 0">
             <?php endif; ?>
 

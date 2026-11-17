@@ -26,9 +26,23 @@ $order = match ($sort) {
     default => 'p.id DESC',
 };
 
-$sql = "SELECT p.*, c.name AS category_name FROM products p
+$page = max(1, (int)($_GET['page'] ?? 1));
+$perPage = 12;
+
+$countSt = $pdo->prepare("SELECT COUNT(*) FROM products p WHERE " . implode(' AND ', $where));
+$countSt->execute($params);
+$totalProducts = (int)$countSt->fetchColumn();
+$totalPages = max(1, (int)ceil($totalProducts / $perPage));
+if ($page > $totalPages) $page = $totalPages;
+$offset = ($page - 1) * $perPage;
+
+$sql = "SELECT p.*, c.name AS category_name,
+               (SELECT AVG(rating) FROM reviews r WHERE r.product_id = p.id) AS avg_rating,
+               (SELECT COUNT(*) FROM reviews r WHERE r.product_id = p.id) AS rating_count
+        FROM products p
         LEFT JOIN categories c ON c.id = p.category_id
-        WHERE " . implode(' AND ', $where) . " ORDER BY $order";
+        WHERE " . implode(' AND ', $where) . " ORDER BY $order
+        LIMIT $perPage OFFSET $offset";
 $st = $pdo->prepare($sql);
 $st->execute($params);
 $products = $st->fetchAll();
@@ -40,7 +54,7 @@ $qs = function ($extra = []) use ($search, $cat, $sort) {
 ?>
 <div class="section-head">
     <h2>Katalog Produk</h2>
-    <span class="text-muted"><?= count($products) ?> produk ditemukan</span>
+    <span class="text-muted"><?= $totalProducts ?> produk ditemukan</span>
 </div>
 
 <form class="card filter-bar" method="get" action="">
@@ -81,11 +95,8 @@ $qs = function ($extra = []) use ($search, $cat, $sort) {
                     <h3><?= e($p['name']) ?></h3>
                     <span class="brand"><?= e($p['brand']) ?></span>
                     <span class="price"><?= rupiah($p['price']) ?></span>
-                    <?php
-                    $avg = product_rating_avg($p['id']);
-                    if ($avg[1] > 0):
-                    ?>
-                        <span class="stars">★ <?= number_format((float)$avg[0], 1, ',', '.') ?> (<?= (int)$avg[1] ?>)</span>
+                    <?php if ((int)$p['rating_count'] > 0): ?>
+                        <span class="stars">★ <?= number_format((float)$p['avg_rating'], 1, ',', '.') ?> (<?= (int)$p['rating_count'] ?>)</span>
                     <?php endif; ?>
                     <div class="foot">
                         <?php if ($p['stock'] > 0): ?>
@@ -105,5 +116,19 @@ $qs = function ($extra = []) use ($search, $cat, $sort) {
             </div>
         <?php endforeach; ?>
     </div>
+
+    <?php if ($totalPages > 1): ?>
+        <div class="flex wrap mt-3" style="justify-content:center;gap:8px">
+            <?php if ($page > 1): ?>
+                <a class="btn btn-sm btn-outline-dark" href="<?= url('katalog.php?' . $qs(['page' => $page - 1])) ?>">← Sebelumnya</a>
+            <?php endif; ?>
+            <?php for ($i = 1; $i <= $totalPages; $i++): ?>
+                <a class="btn btn-sm <?= $i === $page ? 'btn-dark' : 'btn-outline-dark' ?>" href="<?= url('katalog.php?' . $qs(['page' => $i])) ?>"><?= $i ?></a>
+            <?php endfor; ?>
+            <?php if ($page < $totalPages): ?>
+                <a class="btn btn-sm btn-outline-dark" href="<?= url('katalog.php?' . $qs(['page' => $page + 1])) ?>">Berikutnya →</a>
+            <?php endif; ?>
+        </div>
+    <?php endif; ?>
 <?php endif; ?>
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

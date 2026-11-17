@@ -4,6 +4,8 @@
 // Default koneksi Laragon/XAMPP: user root, tanpa password
 // ============================================================
 
+date_default_timezone_set('Asia/Jakarta');
+
 define('DB_HOST', '127.0.0.1');
 define('DB_PORT', '3306');
 define('DB_NAME', 'jaket_imports');
@@ -34,6 +36,7 @@ try {
             PDO::ATTR_EMULATE_PREPARES => false,
         ]
     );
+    $pdo->exec("SET time_zone = '+07:00'");
 } catch (PDOException $e) {
     die('<div style="font-family:sans-serif;padding:30px;max-width:600px;margin:40px auto;border:1px solid #ddd;border-radius:8px">
         <h2 style="margin-top:0">Koneksi database gagal</h2>

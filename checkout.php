@@ -64,6 +64,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $pdo->beginTransaction();
         try {
+            $lock = $pdo->prepare('SELECT id, name, stock FROM products WHERE id = ? FOR UPDATE');
+            foreach ($items as $it) {
+                $lock->execute([$it['id']]);
+                $row = $lock->fetch();
+                if (!$row || (int)$row['stock'] < (int)$it['qty']) {
+                    throw new RuntimeException('Stok produk "' . $it['name'] . '" tidak mencukupi (sisa ' . (int)($row['stock'] ?? 0) . '). Silakan perbarui keranjang.');
+                }
+            }
+
             $insOrder = $pdo->prepare(
                 'INSERT INTO orders (order_code, user_id, address, payment_method, subtotal, discount, total)
                  VALUES (?,?,?,?,?,?,?)'
@@ -72,11 +81,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $orderId = $pdo->lastInsertId();
 
             $insItem = $pdo->prepare('INSERT INTO order_items (order_id, product_id, product_name, price, qty) VALUES (?,?,?,?,?)');
-            $decStock = $pdo->prepare('UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?');
+            $decStock = $pdo->prepare('UPDATE products SET stock = stock - ? WHERE id = ?');
 
             foreach ($items as $it) {
                 $insItem->execute([$orderId, $it['id'], $it['name'], $it['price'], $it['qty']]);
-                $decStock->execute([$it['qty'], $it['id'], $it['qty']]);
+                $decStock->execute([$it['qty'], $it['id']]);
             }
 
             $insPay = $pdo->prepare('INSERT INTO payments (order_id, method) VALUES (?,?)');

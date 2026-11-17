@@ -72,6 +72,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_payment'])) {
     $st->execute([$orderId]);
     $order = $st->fetch();
     if ($order) {
+        $proofSt = $pdo->prepare('SELECT proof_image FROM payments WHERE order_id = ?');
+        $proofSt->execute([$orderId]);
+        if (empty($proofSt->fetchColumn())) {
+            set_flash('danger', 'Tidak bisa konfirmasi lunas: user belum mengunggah bukti pembayaran.');
+            redirect('admin/pesanan.php' . ($viewId ? '?view=' . $viewId : ''));
+        }
         $pdo->prepare('UPDATE payments SET status = "success", paid_at = COALESCE(paid_at, NOW()) WHERE order_id = ?')->execute([$orderId]);
         $pdo->prepare('UPDATE orders SET status = IF(status = "pending", "processed", status) WHERE id = ?')->execute([$orderId]);
         $notif = $pdo->prepare('INSERT INTO notifications (user_id, title, message) VALUES (?,?,?)');
@@ -190,12 +196,16 @@ if ($viewId > 0) {
                         <?php endif; ?>
 
                         <?php if ($payment['status'] !== 'success'): ?>
-                            <form method="post" class="mt-3">
-                                <?= csrf_field() ?>
-                                <input type="hidden" name="order_id" value="<?= $order['id'] ?>">
-                                <input type="hidden" name="confirm_payment" value="1">
-                                <button class="btn btn-success" type="submit" data-confirm="Konfirmasi pembayaran ini sudah lunas?">✓ Konfirmasi Pembayaran Lunas</button>
-                            </form>
+                            <?php if ($proofUrl): ?>
+                                <form method="post" class="mt-3">
+                                    <?= csrf_field() ?>
+                                    <input type="hidden" name="order_id" value="<?= $order['id'] ?>">
+                                    <input type="hidden" name="confirm_payment" value="1">
+                                    <button class="btn btn-success" type="submit" data-confirm="Konfirmasi pembayaran ini sudah lunas?">✓ Konfirmasi Pembayaran Lunas</button>
+                                </form>
+                            <?php else: ?>
+                                <p class="text-muted mt-3">User belum mengunggah bukti transfer — pembayaran belum bisa dikonfirmasi lunas.</p>
+                            <?php endif; ?>
                         <?php endif; ?>
                     <?php else: ?>
                         <p class="text-muted mt-2">Belum ada bukti pembayaran dari user.</p>
@@ -239,9 +249,21 @@ if ($viewId > 0) {
 $where = "1=1";
 $params = [];
 if ($filter !== 'all') { $where .= " AND o.status = ?"; $params[] = $filter; }
+
+$page = max(1, (int)($_GET['page'] ?? 1));
+$perPage = 20;
+$countSt = $pdo->prepare("SELECT COUNT(*) FROM orders o WHERE $where");
+$countSt->execute($params);
+$totalOrders = (int)$countSt->fetchColumn();
+$totalPages = max(1, (int)ceil($totalOrders / $perPage));
+if ($page > $totalPages) $page = $totalPages;
+$offset = ($page - 1) * $perPage;
+
 $orders = $pdo->prepare(
-    "SELECT o.*, u.name AS user_name FROM orders o JOIN users u ON u.id = o.user_id
-     WHERE $where ORDER BY o.id DESC"
+    "SELECT o.*, u.name AS user_name, pay.status AS pay_status, pay.proof_image AS pay_proof
+     FROM orders o JOIN users u ON u.id = o.user_id
+     LEFT JOIN payments pay ON pay.order_id = o.id
+     WHERE $where ORDER BY o.id DESC LIMIT $perPage OFFSET $offset"
 );
 $orders->execute($params);
 $orders = $orders->fetchAll();
@@ -274,15 +296,13 @@ foreach ($statuses as $s) $countBy[$s['status']] = (int)$s['c'];
                         <tr><td colspan="8" class="text-center text-muted">Tidak ada pesanan dengan filter ini.</td></tr>
                     <?php endif; ?>
                     <?php foreach ($orders as $o): ?>
-                        <?php $opay = $pdo->prepare('SELECT status, proof_image FROM payments WHERE order_id = ?');
-                        $opay->execute([$o['id']]);
-                        $opayRow = $opay->fetch(); ?>
+                        <?php $opayRow = $o['pay_status'] !== null ? ['status' => $o['pay_status'], 'proof_image' => $o['pay_proof']] : null; ?>
                         <tr>
                             <td><strong><?= e($o['order_code']) ?></strong></td>
                             <td><?= e($o['user_name']) ?></td>
                             <td class="num"><?= rupiah($o['total']) ?></td>
                             <td><?= e(strtoupper($o['payment_method'])) ?></td>
-                            <td><?= payment_status_badge($opayRow ?: null) ?></td>
+                            <td><?= payment_status_badge($opayRow) ?></td>
                             <td><?= status_badge($o['status']) ?></td>
                             <td><?= tgl_id($o['created_at']) ?></td>
                             <td><a class="btn btn-sm btn-outline-dark" href="<?= url('admin/pesanan.php?view=' . $o['id']) ?>">Kelola</a></td>
@@ -292,6 +312,21 @@ foreach ($statuses as $s) $countBy[$s['status']] = (int)$s['c'];
                 </table>
             </div>
         </div>
+
+        <?php if ($totalPages > 1): ?>
+            <?php $base = 'admin/pesanan.php?' . ($filter !== 'all' ? 'status=' . urlencode($filter) . '&' : ''); ?>
+            <div class="flex wrap mt-3" style="justify-content:center;gap:8px">
+                <?php if ($page > 1): ?>
+                    <a class="btn btn-sm btn-outline-dark" href="<?= url($base . 'page=' . ($page - 1)) ?>">← Sebelumnya</a>
+                <?php endif; ?>
+                <?php for ($i = 1; $i <= $totalPages; $i++): ?>
+                    <a class="btn btn-sm <?= $i === $page ? 'btn-dark' : 'btn-outline-dark' ?>" href="<?= url($base . 'page=' . $i) ?>"><?= $i ?></a>
+                <?php endfor; ?>
+                <?php if ($page < $totalPages): ?>
+                    <a class="btn btn-sm btn-outline-dark" href="<?= url($base . 'page=' . ($page + 1)) ?>">Berikutnya →</a>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
     </div>
 </div>
 <?php require_once __DIR__ . '/../includes/footer.php'; ?>

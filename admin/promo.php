@@ -36,6 +36,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_promo'])) {
     if ($type === 'percent' && ($value <= 0 || $value > 100)) $errors[] = 'Nilai persen harus antara 1–100.';
     if ($type === 'nominal' && $value <= 0) $errors[] = 'Nilai nominal harus lebih dari 0.';
 
+    if (!$errors && $code !== '') {
+        $dup = $pdo->prepare('SELECT id FROM promos WHERE code = ? AND id <> ?');
+        $dup->execute([$code, $id]);
+        if ($dup->fetch()) {
+            $errors[] = 'Kode promo "' . $code . '" sudah dipakai. Gunakan kode lain.';
+        }
+    }
+
     if (!$errors) {
         if ($id > 0) {
             $upd = $pdo->prepare('UPDATE promos SET code=?, name=?, type=?, value=?, min_order=?, is_active=? WHERE id=?');

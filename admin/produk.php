@@ -45,29 +45,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_product'])) {
     if (!empty($_FILES['image']['name']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
         $finfo = new finfo(FILEINFO_MIME_TYPE);
         $mime = $finfo->file($_FILES['image']['tmp_name']);
-        $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif', 'image/svg+xml' => 'svg'];
+        $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif'];
         if (!isset($allowed[$mime])) {
-            $errors[] = 'Format gambar tidak didukung (JPG, PNG, WEBP, GIF, SVG).';
+            $errors[] = 'Format gambar tidak didukung (JPG, PNG, WEBP, GIF).';
         } elseif ($_FILES['image']['size'] > 2 * 1024 * 1024) {
             $errors[] = 'Ukuran gambar maksimal 2MB.';
         } else {
             $fname = 'products/p_' . time() . '_' . rand(100, 999) . '.' . $allowed[$mime];
-            move_uploaded_file($_FILES['image']['tmp_name'], __DIR__ . '/../images/' . $fname);
-            $image = $fname;
+            if (move_uploaded_file($_FILES['image']['tmp_name'], __DIR__ . '/../images/' . $fname)) {
+                $image = $fname;
+            } else {
+                $errors[] = 'Gagal mengunggah gambar. Coba lagi.';
+            }
         }
     }
 
     if (!$errors) {
-        if ($id > 0) {
-            $upd = $pdo->prepare('UPDATE products SET category_id=?, name=?, brand=?, description=?, price=?, stock=?, image=?, is_active=? WHERE id=?');
-            $upd->execute([$categoryId, $name, $brand, $desc, $price, $stock, $image, $isActive, $id]);
-            set_flash('success', 'Produk berhasil diperbarui.');
-        } else {
-            $ins = $pdo->prepare('INSERT INTO products (category_id, name, brand, description, price, stock, image, is_active) VALUES (?,?,?,?,?,?,?,?)');
-            $ins->execute([$categoryId, $name, $brand, $desc, $price, $stock, $image, $isActive]);
-            set_flash('success', 'Produk baru berhasil ditambahkan.');
+        try {
+            if ($id > 0) {
+                $upd = $pdo->prepare('UPDATE products SET category_id=?, name=?, brand=?, description=?, price=?, stock=?, image=?, is_active=? WHERE id=?');
+                $upd->execute([$categoryId, $name, $brand, $desc, $price, $stock, $image, $isActive, $id]);
+                set_flash('success', 'Produk berhasil diperbarui.');
+            } else {
+                $ins = $pdo->prepare('INSERT INTO products (category_id, name, brand, description, price, stock, image, is_active) VALUES (?,?,?,?,?,?,?,?)');
+                $ins->execute([$categoryId, $name, $brand, $desc, $price, $stock, $image, $isActive]);
+                set_flash('success', 'Produk baru berhasil ditambahkan.');
+            }
+            redirect('admin/produk.php');
+        } catch (PDOException $ex) {
+            $errors[] = 'Gagal menyimpan produk: ' . $ex->getMessage();
         }
-        redirect('admin/produk.php');
     }
 }
 

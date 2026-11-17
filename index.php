@@ -2,7 +2,10 @@
 require_once __DIR__ . '/includes/header.php';
 
 $latest = $pdo->query(
-    "SELECT p.*, c.name AS category_name FROM products p
+    "SELECT p.*, c.name AS category_name,
+            (SELECT AVG(rating) FROM reviews r WHERE r.product_id = p.id) AS avg_rating,
+            (SELECT COUNT(*) FROM reviews r WHERE r.product_id = p.id) AS rating_count
+     FROM products p
      LEFT JOIN categories c ON c.id = p.category_id
      WHERE p.is_active = 1 ORDER BY p.id DESC LIMIT 8"
 )->fetchAll();
@@ -18,7 +21,7 @@ $prodCount = $pdo->query('SELECT COUNT(*) FROM products WHERE is_active = 1')->f
     <p>Temukan koleksi hoodie, bomber, parka, denim, dan blazer import dengan harga terbaik. Katalog lengkap, pembayaran aman, dan tracking pesanan real-time.</p>
     <div class="flex wrap">
         <a class="btn btn-primary btn-lg" href="<?= url('katalog.php') ?>">Lihat Katalog</a>
-        <a class="btn btn-outline btn-lg" href="<?= url('katalog.php?cat=' . $pdo->query('SELECT MIN(id) FROM categories')->fetchColumn()) ?>">Koleksi Terbaru</a>
+        <a class="btn btn-outline btn-lg" href="<?= url('katalog.php?sort=newest') ?>">Koleksi Terbaru</a>
     </div>
 </div>
 
@@ -38,11 +41,8 @@ $prodCount = $pdo->query('SELECT COUNT(*) FROM products WHERE is_active = 1')->f
                 <h3><?= e($p['name']) ?></h3>
                 <span class="brand"><?= e($p['brand']) ?></span>
                 <span class="price"><?= rupiah($p['price']) ?></span>
-                <?php
-                $avg = product_rating_avg($p['id']);
-                if ($avg[1] > 0):
-                ?>
-                    <span class="stars">★ <?= number_format((float)$avg[0], 1, ',', '.') ?> (<?= (int)$avg[1] ?>)</span>
+                <?php if ((int)$p['rating_count'] > 0): ?>
+                    <span class="stars">★ <?= number_format((float)$p['avg_rating'], 1, ',', '.') ?> (<?= (int)$p['rating_count'] ?>)</span>
                 <?php endif; ?>
                 <div class="foot">
                     <?php if ($p['stock'] > 0): ?>

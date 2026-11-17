@@ -74,7 +74,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'Ukuran bukti maksimal 3MB.';
         } else {
             $fname = 'proof_' . $order['id'] . '_' . time() . '_' . rand(100, 999) . '.' . $allowed[$mime];
-            if (move_uploaded_file($_FILES['proof']['tmp_name'], __DIR__ . '/uploads/payments/' . $fname)) {
+            $uploadDir = __DIR__ . '/uploads/payments';
+            if (!is_dir($uploadDir)) {
+                @mkdir($uploadDir, 0775, true);
+            }
+            if (move_uploaded_file($_FILES['proof']['tmp_name'], $uploadDir . '/' . $fname)) {
                 $proofImage = $fname;
             } else {
                 $errors[] = 'Gagal mengunggah bukti. Coba lagi.';
